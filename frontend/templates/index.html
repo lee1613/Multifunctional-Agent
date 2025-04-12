@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Chatbot</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-image: url('/static/background3.jpg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+        }
+        .chat-container {
+            width: 90%;
+            height:80%;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            background-color: rgba(249, 249, 249, 0.9); /* Semi-transparent background */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Optional: Adds shadow to make it stand out */
+        }
+        #output {
+            height: 85%;
+            width: 98%;
+            overflow-y: scroll;
+            border: 1px solid #ccc;
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: #fff;
+        }
+        input[type="text"] {
+            width: 98%;
+            height: 5%;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+        /* Style for user messages */
+        .user-msg {
+            text-align: right;
+            background-color: #DCF8C6;
+            margin: 5px 0;
+            padding: 5px;
+            border-radius: 5px;
+        }
+        /* Style for bot messages */
+        .bot-msg {
+            text-align: left;
+            background-color: #E6E6E6;
+            margin: 5px 0;
+            padding: 5px;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+        }
+        .bot-avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="chat-container">
+    <div id="output"></div>
+    <input type="text" id="user_input" placeholder="Type your message..." onkeydown="if(event.key === 'Enter') sendMessage()">
+</div>
+
+<script>
+    function sendMessage() {
+        const user_input = document.getElementById('user_input').value;
+        if (user_input.trim() === "") return;
+        
+        // Display the user's input (align to right, no "User:" label)
+        const userMessage = `<div class="user-msg">${user_input}</div>`;
+        document.getElementById('output').innerHTML += userMessage;
+        document.getElementById('user_input').value = '';
+
+        // Send input to backend (Flask)
+        fetch('/get_response', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ user_input: user_input })
+        })
+        .then(response => response.json())
+        .then(data => {
+            const bot_response = data.response;
+            // Display bot's response with avatar beside it (align to left, no "Bot:" label)
+            const botMessage = `<div class="bot-msg">
+                                    <img src="/static/bot-avatar.png" class="bot-avatar" alt="Bot Avatar">
+                                    ${bot_response}
+                                </div>`;
+            document.getElementById('output').innerHTML += botMessage;
+            document.getElementById('output').scrollTop = document.getElementById('output').scrollHeight;
+        });
+    }
+</script>
+
+</body>
+</html>
