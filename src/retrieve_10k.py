@@ -52,12 +52,12 @@ import re
 
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 vector_db = FAISS.load_local(
-    "10K Analysis/src/vector_db",
+    "src/vector_db",
     embeddings=embeddings,
     allow_dangerous_deserialization=True
 )
 
-with open('10K Analysis/src/section_summaries.json', 'r', encoding='utf-8') as f:
+with open('src/section_summaries.json', 'r', encoding='utf-8') as f:
     section_summaries = json.load(f)
 
 query = "Apple's strategy in global smartphone markets"
@@ -71,34 +71,6 @@ summarizer = pipeline("summarization", model="knkarthick/MEETING_SUMMARY", devic
 
 ###FUNCTIONS
 ########################################################################
-# def find_items(query, section_summaries, removed = []):
-
-#     # Load a sentence transformer model
-#     model = SentenceTransformer('all-MiniLM-L6-v2')
-
-#     # Prepare data
-#     items = list(section_summaries.items())
-#     item_keys = [item[0] for item in items]
-#     summaries = [item[1] for item in items]
-
-#     # Compute embeddings
-#     summary_embeddings = model.encode(summaries, convert_to_tensor=True)
-#     query_embedding = model.encode(query, convert_to_tensor=True)
-
-#     # Compute cosine similarities
-#     cosine_scores = util.cos_sim(query_embedding, summary_embeddings)[0]
-
-#     # Get top 3 results
-#     top_k = 3
-#     top_results = torch.topk(cosine_scores, k=top_k)
-
-#     top_matches = []
-#     for score, idx in zip(top_results.values, top_results.indices):
-#         top_matches.append(item_keys[idx])
-
-#     return top_matches
-
-
 
 def find_items(query, section_summaries, removed=[]):
     # Load a sentence transformer model
