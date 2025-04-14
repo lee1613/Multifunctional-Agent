@@ -219,10 +219,8 @@ def pipeline(query):
     retrieved_docs = retrieve_and_rerank(query, faiss_index, cross_encoder, initial_k=10, final_k=5)
     prompt = build_prompt(retrieved_docs, query, prompt_engineering)
     insight = generate_insight(prompt)
+
+    print("============= transcript results =============")
     print(insight)
     return insight
 
-if __name__ == "__main__":
-    query = "How did iPhone sales perform across regions, and what contributed to the growth in 2024 Q4?"
-    print(query)
-    pipeline(query)
