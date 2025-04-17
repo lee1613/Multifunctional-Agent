@@ -13,35 +13,16 @@ from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 import numpy as np
 import os
-from langchain_community.vectorstores import FAISS
-from langchain_text_splitters import CharacterTextSplitter
-from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
-import numpy as np
 import textwrap
-from langchain_community.vectorstores import FAISS
-from langchain_text_splitters import CharacterTextSplitter
-from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
-import numpy as np
 import json
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.docstore.document import Document
-from transformers import pipeline
 from sec_edgar_downloader import Downloader
 import requests
-import os
 import time
 import faiss
 from sentence_transformers import CrossEncoder
 from sentence_transformers import SentenceTransformer, util
 import torch
-from sentence_transformers import SentenceTransformer, util
-import json
-import torch
-from sentence_transformers import CrossEncoder
 from collections import defaultdict
-
 from operator import itemgetter
 import re
 
@@ -52,12 +33,12 @@ import re
 
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 vector_db = FAISS.load_local(
-    "src/vector_db",
+    "vector_db",
     embeddings=embeddings,
     allow_dangerous_deserialization=True
 )
 
-with open('src/section_summaries.json', 'r', encoding='utf-8') as f:
+with open('section_summaries.json', 'r', encoding='utf-8') as f:
     section_summaries = json.load(f)
 
 query = "Apple's strategy in global smartphone markets"
@@ -73,15 +54,20 @@ summarizer = pipeline("summarization", model="knkarthick/MEETING_SUMMARY", devic
 ########################################################################
 
 def find_items(query, section_summaries, removed=[]):
+    top_k = 3
+
+    # Return the remaining objects in section_summaries if it's the last loop of pipeline:
+    if len(removed) + top_k >= len(section_summaries):
+        return [key for key in section_summaries.keys() if key not in removed]
     # Load a sentence transformer model
     model = SentenceTransformer('all-MiniLM-L6-v2')
 
     # Prepare data
     items = list(section_summaries.items())
-    
+
     # Filter out removed items
     filtered_items = [item for item in items if item[0] not in removed]
-    
+
     item_keys = [item[0] for item in filtered_items]
     summaries = [item[1] for item in filtered_items]
 
@@ -93,7 +79,6 @@ def find_items(query, section_summaries, removed=[]):
     cosine_scores = util.cos_sim(query_embedding, summary_embeddings)[0]
 
     # Get top 3 results
-    top_k = 3
     top_results = torch.topk(cosine_scores, k=top_k)
 
     top_matches = []
@@ -101,6 +86,7 @@ def find_items(query, section_summaries, removed=[]):
         top_matches.append(item_keys[idx])
 
     return top_matches
+
 
 def rerank_documents(query, retrieved_docs, cross_encoder):
     # Prepare the inputs for the cross-encoder
@@ -122,40 +108,45 @@ def rerank_documents(query, retrieved_docs, cross_encoder):
 
     return reranked_docs
 
-def filtered_retrieval(query, vector_db, cross_encoder, filter, fetch_k = 100, k = 5):
+
+def filtered_retrieval(query, vector_db, cross_encoder, filter, fetch_k=100, k=5):
     retriever = vector_db.as_retriever(
-        search_kwargs = {
-            "filter" : filter,
-            "fetch_k" : fetch_k,
-            "k" : k
+        search_kwargs={
+            "filter": filter,
+            "fetch_k": fetch_k,
+            "k": k
         }
     )
 
     filtered_docs = retriever.invoke(query)
-    print(filtered_docs)
+    # print(filtered_docs)
     reranked = rerank_documents(query, filtered_docs, cross_encoder)
 
     return reranked
+
 
 # Load summarizer
 def summarize_text(text, max_len=100, min_len=40):
     text = text[:4000]  # Prevent exceeding token limit
     return summarizer(text, max_length=max_len, min_length=min_len, do_sample=False)[0]['summary_text']
 
+
 def recursive_summarize(text, max_chunk_chars=3500):
     """Break long text into chunks and summarize, then summarize summaries."""
     if len(text) <= max_chunk_chars:
         return summarize_text(text)
-    
+
+
     # Split into smaller chunks
     chunks = textwrap.wrap(text, max_chunk_chars)
     chunk_summaries = [summarize_text(chunk) for chunk in chunks]
-    
+
     # Combine and summarize again
     final_input = " ".join(chunk_summaries)
     return summarize_text(final_input)
 
-def summarize_10k_chunks(all_chunks: list, item = []):
+
+def summarize_10k_chunks(all_chunks: list, item=[]):
     section_summaries = {}
 
     # Group chunks by section
@@ -175,7 +166,7 @@ def summarize_10k_chunks(all_chunks: list, item = []):
                 chunk_summary = summarize_text(doc.page_content)
                 doc.metadata["chunk_summary"] = chunk_summary
                 chunk_summaries.append(chunk_summary)
-                print(chunk_summary)
+                # print(chunk_summary)
 
         combined_summary_text = " ".join(chunk_summaries)
         section_summary = recursive_summarize(combined_summary_text)
@@ -187,29 +178,29 @@ def summarize_10k_chunks(all_chunks: list, item = []):
                     break
 
         section_summaries[section] = section_summary
-        print(section_summary)
-        print("__________________________________________")
+        # print(section_summary)
+        # print("__________________________________________")
 
     return section_summaries
 
-########################################################################
 
+########################################################################
 
 
 ###SCRIPT
 ########################################################################
 
-# # similarity search between section_summaries and query, output item 
+# # similarity search between section_summaries and query, output item
 # top_matches = find_items(query, section_summaries)
 # print(top_matches)
 
 # retrieve topk chunks that is relevant to query in each item
-def retrieve_topk_chunks(top_matches):
+def retrieve_topk_chunks(top_matches, company, year):
     all_relevant_chunks = []
     for item in top_matches:
-        filter = {"company": "apple",
-                    "year": "2017",
-                    "section": item}
+        filter = {"company": company,
+                  "year": year,
+                  "section": item}
         try:
             retrieved_docs = filtered_retrieval(query, vector_db, cross_encoder, filter)
             all_relevant_chunks.append(retrieved_docs)
@@ -229,10 +220,10 @@ def flatten_chunks(all_relevant_chunks):
             flattened_chunks.append(chunk)  # Assumes each chunk is a dict with at least 'content' key
     return flattened_chunks
 
+
 # flattened_chunks = flattened_chunks(all_relevant_chunks)
 
 def rerank2(flattened_chunks):
-
     # Create inputs for the cross encoder (query, chunk)
     rerank_inputs = [(query, doc.page_content) for doc in flattened_chunks]
 
@@ -251,6 +242,7 @@ def rerank2(flattened_chunks):
     reranked_chunks = sorted(scored_chunks, key=itemgetter("score"), reverse=True)
     return reranked_chunks
 
+
 def generate_retrieve_context(reranked_chunks):
     retrieved_context = [
         f"{i}. {item['document'].page_content.strip()}"
@@ -266,26 +258,23 @@ def generate_retrieve_context(reranked_chunks):
 
 
 def retrieve_process(retrieved_context, query):
-
     prompt = f"""
         You are given a user query and a set of retrieved documents. Determine whether the retrieved documents are relevant to answering the query.
 
         Query: "{query}"
-
         Retrieved Context:
-        {retrieved_context}
+        {"\n".join(retrieved_context)}
 
         Instructions:
-        - If the documents are not relevant, respond exactly: "No"
+        - If the documents are not relevant, respond the following: 
+        No.
         - If the documents are relevant, respond exactly in the following format:
-        Yes, from line X. Respond
+        Yes, from point X. Respond
+        - Your respond should start with only "Yes" or "No". Don't place anything in front of "Yes" or "No"
 
-        Where X is the line number in the Retrieved Context that contains the relevant information. And Respond is the answer generated utilizing the retrieved context to answer the query.
-
-        Example:
-        Yes, from line 2
+        Where X is the point number in the Retrieved Context that contains the relevant information. And Respond is the answer to the query.
     """
-        
+
     model_id = "meta-llama/Llama-3.3-70B-Instruct"
     API_URL = f"https://api-inference.huggingface.co/models/{model_id}"
 
@@ -298,23 +287,25 @@ def retrieve_process(retrieved_context, query):
 
     text = response.json()[0]["generated_text"]
 
-    return(text[text.index(prompt) + len(prompt) + 1:])
+    print("---------------------------------The following section are the text being return by the hugging face model-------------------------")
+    print(text)
+    return (text[text.index(prompt) + len(prompt) + 1:])
+
 
 # llm_output = retrieve_process(retrieved_context, query)
-
 
 
 def update_section_summaries(llm_output, reranked_chunks, section_summaries):
     llm_output = llm_output.strip()
 
-    if not llm_output.lower().startswith("yes"):
+    if not llm_output.startswith("Yes"):
         return None  # Skip if not relevant
 
     # Extract the line number from llm_output
-    match = re.search(r"line\s+(\d+)", llm_output.lower())
+    match = re.search(r"point\s+(\d+)", llm_output.lower())
     if not match:
         return None  # Line number not found
-    
+
     line_number = int(match.group(1)) - 1  # Convert to 0-based index
 
     # Safety check
@@ -323,6 +314,8 @@ def update_section_summaries(llm_output, reranked_chunks, section_summaries):
 
     # Get the relevant document and summarize
     relevant_doc = [reranked_chunks[line_number]["document"]]
+
+
     new_summarisation = summarize_10k_chunks(relevant_doc)
 
     # Update the section_summaries dictionary
@@ -331,9 +324,9 @@ def update_section_summaries(llm_output, reranked_chunks, section_summaries):
             section_summaries[key] += " " + value
         else:
             section_summaries[key] = value
-    
+
     with open('section_summaries.json', 'w', encoding='utf-8') as f:
-          json.dump(section_summaries, f, ensure_ascii=False, indent=4)
+        json.dump(section_summaries, f, ensure_ascii=False, indent=4)
 
     return section_summaries
 
@@ -341,44 +334,59 @@ def update_section_summaries(llm_output, reranked_chunks, section_summaries):
 # updated_section_summaries = update_section_summaries(llm_output, reranked_chunks, section_summaries)
 
 
+def pipeline(query, company, year):
+    top_matches = find_items(query, section_summaries, removed)
+    # print(top_matches)
 
-
-def pipeline(query):
-    top_matches = find_items(query, section_summaries)
-    print(top_matches)
-
-    all_relevant_chunks = retrieve_topk_chunks(top_matches)
-    print(all_relevant_chunks)
-
-
+    all_relevant_chunks = retrieve_topk_chunks(top_matches, company, year)
+    # print(all_relevant_chunks)
+    if len(all_relevant_chunks) == 0:
+        return "No", top_matches
     flattened_chunks = flatten_chunks(all_relevant_chunks)
 
     reranked_chunks = rerank2(flattened_chunks)
     retrieved_context = generate_retrieve_context(reranked_chunks)
-    print(retrieved_context)
-
+    # print(retrieved_context)
 
     llm_output = retrieve_process(retrieved_context, query)
-    print(llm_output)
+    # print(llm_output)
 
     llm_output = llm_output.strip()
 
-    return llm_output
+    # Update the summaries everytime the retrieval process has been done.
 
-    # if not llm_output.lower().startswith("yes"):
+    # update_section_summaries(llm_output, reranked_chunks, section_summaries)
+    print("****************************************************Output form one pipeline***********************************************")
+    print(llm_output)
+    return llm_output, top_matches
+
+    # if not llm_output.lower().startswith("Yes"):
     #     # no, then need to remove from the list, and scan through another 3 items
     #     return None  # Skip if not relevant
     # else:
     #     update_section_summaries(llm_output, reranked_chunks, section_summaries)
 
 
-def exhaustive_query(query, section_summaries, removed):
-    if find_items(query, section_summaries, removed):
-
-        pass
+def exhaustive_query(query, company, year, section_summaries, removed):
+    print(f"The length of the removed section is now: {len(removed)}")
+    if len(removed) >= len(section_summaries):
+        return "No context found from our Database"
+    else:
+        output, top_matches = pipeline(query, company, year)
+        if output.startswith("No"):
+            removed.extend(top_matches)
+            return exhaustive_query(query, company, year, section_summaries, removed)
+        else:
+            return output
 
 
 if __name__ == "__main__":
-    query = "What's the revenue for Apple in 2017"
+    query = "Do you know who's Jiun Yih?"
     print(query)
-    pipeline(query)
+    company = "apple"
+    year = "2017"
+    removed = []
+    output = exhaustive_query(query, company, year, section_summaries, removed)
+
+    # exhaustive_query(query, company, year, section_summaries, removed)
+
