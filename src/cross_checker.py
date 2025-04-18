@@ -1,12 +1,11 @@
-from retrieve_transcript import pipeline as transcript_pipeline
-from retrieve_10k import pipeline as tenk_pipeline
+from src.retrieve_transcript import pipeline as transcript_pipeline
+from src.retrieve_10k import pipeline as tenk_pipeline
 import os 
 import openai
 
 os.environ["OPENAI_API_KEY"] = ""
 
-
-def multimodal_agent(query):
+def multimodal_agent(query, company, year):
     print(f"Running multimodal RAG agents on query: {query}")
 
     # Step 1: Run both pipelines
@@ -53,14 +52,18 @@ def cross_check(transcript_output, tenk_output):
         max_tokens=800,
     )
 
-    return response.choices[0].message.content
+    final_response = "📊 Final Investment Insight:\n" + response.choices[0].message.content
+
+
+    return final_response
 
 
 
-
-if __name__ == "__main__":
-    query = "Did Apple experience growth in emerging markets in Q4 2024?"
-    multimodal_agent(query)
+# if __name__ == "__main__":
+#     query = "Did Apple experience growth in emerging markets in Q4 2024?"
+#     company = 'Apple' 
+#     year = '2024'
+#     multimodal_agent(query, company, year)
 
 
 

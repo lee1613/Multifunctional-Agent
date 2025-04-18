@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simple Chatbot</title>
+    <title>Multimodel RAG Agent Chatbot</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -19,8 +19,8 @@
             background-attachment: fixed;
         }
         .chat-container {
-            width: 90%;
-            height:80%;
+            width: 80%;
+            height:70%;
             max-width: 800px;
             margin: 50px auto;
             padding: 20px;
@@ -41,25 +41,27 @@
         input[type="text"] {
             width: 98%;
             height: 5%;
-            padding: 10px;
+            padding: 5px 14px;
             margin-top: 10px;
             border-radius: 5px;
             border: 1px solid #ccc;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
         /* Style for user messages */
         .user-msg {
             text-align: right;
             background-color: #DCF8C6;
-            margin: 5px 0;
-            padding: 5px;
+            margin: 5px 3px;
+            padding: 14px 12px;  /* Adding padding */
             border-radius: 5px;
         }
+
         /* Style for bot messages */
         .bot-msg {
             text-align: left;
             background-color: #E6E6E6;
             margin: 5px 0;
-            padding: 5px;
+            padding: 14px 12px;  /* Adding padding */
             border-radius: 5px;
             display: flex;
             align-items: center;
@@ -70,23 +72,73 @@
             border-radius: 50%;
             margin-right: 10px;
         }
+        /* .user-msg, .bot-msg {
+            animation: fadeIn 0.5s ease-in;
+        } */
+
+        @keyframes fadeIn {
+            from { opacity: 0.5; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
     </style>
 </head>
 <body>
+
+<!-- <div style="position: fixed; top: 10px; right: 10px; background-color: #eef; padding: 4px 10px; border-radius: 12px; font-size: 13px; color: #333;">
+    Company: {{ company }}
+    </div> -->
+
+<h1 style="position: absolute; top: 20px; text-align: center; width: 100%; font-size: 2.5em; color: white; text-shadow: 1px 1px 2px black;">
+    MULTIMODAL RAG AGENT
+</h1>
 
 <div class="chat-container">
     <div id="output"></div>
     <input type="text" id="user_input" placeholder="Type your message..." onkeydown="if(event.key === 'Enter') sendMessage()">
 </div>
 
+<!-- <form action="/reset" method="post" style="position: fixed; bottom: 20px; right: 20px; z-index: 1000;">
+    <button style="padding: 4px 8px; font-size: 12px; border-radius: 6px; background-color: #f0f0f0; border: none; cursor: pointer;">
+      Change Company
+    </button>
+  </form>
+</form> -->
+
+<div style="position: fixed; bottom: 20px; right: 20px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 12px; padding: 10px 16px; font-size: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); z-index: 999;">
+    <div style="margin-bottom: 6px; color: #333;">
+      <strong>Company:</strong> {{ company }}
+    </div>
+    <div style="margin-bottom: 6px; color: #333;">
+      <strong>Year:</strong> {{ year }}
+    </div>
+    <form method="get" action="{{ url_for('landing_page') }}">
+      <button type="submit" style="padding: 4px 10px; font-size: 13px; background-color: #eee; border: 1px solid #ccc; border-radius: 6px; cursor: pointer;">
+        Change
+      </button>
+    </form>
+  </div>
+
+
 <script>
+
     function sendMessage() {
         const user_input = document.getElementById('user_input').value;
         if (user_input.trim() === "") return;
-        
-        // Display the user's input (align to right, no "User:" label)
-        const userMessage = `<div class="user-msg">${user_input}</div>`;
-        document.getElementById('output').innerHTML += userMessage;
+
+        // Create and display the user's input (align to right, no "User:" label)
+        const userMessageDiv = document.createElement("div");
+        userMessageDiv.classList.add("user-msg", "fade-in");
+        userMessageDiv.textContent = user_input;
+        document.getElementById('output').appendChild(userMessageDiv);
         document.getElementById('user_input').value = '';
 
         // Send input to backend (Flask)
@@ -100,15 +152,35 @@
         .then(response => response.json())
         .then(data => {
             const bot_response = data.response;
-            // Display bot's response with avatar beside it (align to left, no "Bot:" label)
-            const botMessage = `<div class="bot-msg">
-                                    <img src="/static/bot-avatar.png" class="bot-avatar" alt="Bot Avatar">
-                                    ${bot_response}
-                                </div>`;
-            document.getElementById('output').innerHTML += botMessage;
+
+            // Create and display the bot's response with avatar beside it (align to left, no "Bot:" label)
+            const botMessageDiv = document.createElement("div");
+            botMessageDiv.classList.add("bot-msg", "fade-in");
+
+            const botAvatarImg = document.createElement("img");
+            botAvatarImg.src = "/static/bot-avatar.png";
+            botAvatarImg.classList.add("bot-avatar");
+
+            botMessageDiv.appendChild(botAvatarImg);
+            // botMessageDiv.appendChild(document.createTextNode(bot_response));
+            botMessageDiv.innerHTML += bot_response.replace(/\n/g, '<br>');
+
+            document.getElementById('output').appendChild(botMessageDiv);
             document.getElementById('output').scrollTop = document.getElementById('output').scrollHeight;
         });
     }
+
+
+
+    // const userMessage = `<div class="user-msg fade-in">${user_input}</div>`;
+    // document.getElementById('output').innerHTML += userMessage;
+    // const botMessage = `<div class="bot-msg fade-in">
+    //                         <img src="/static/bot-avatar.png" class="bot-avatar" alt="Bot Avatar">
+    //                         ${bot_response}
+    //                     </div>`;
+    // document.getElementById('output').innerHTML += botMessage;
+
+
 </script>
 
 </body>
