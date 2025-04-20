@@ -1,30 +1,17 @@
+import os
 import re
-from bs4 import BeautifulSoup
-import unicodedata
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.docstore.document import Document
-from transformers import pipeline
-import html 
-from bs4 import BeautifulSoup
 import json
-from langchain_community.vectorstores import FAISS
-from langchain_text_splitters import CharacterTextSplitter
+import time
+import requests
+import textwrap
+
+import torch
+from transformers import pipeline
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
-import numpy as np
-import os
-import textwrap
-import json
-from sec_edgar_downloader import Downloader
-import requests
-import time
-import faiss
 from sentence_transformers import CrossEncoder
 from sentence_transformers import SentenceTransformer, util
-import torch
-from collections import defaultdict
 from operator import itemgetter
-import re
 
 
 
@@ -162,6 +149,8 @@ def summarize_10k_chunks(all_chunks: list, item=[]):
 
         for doc in docs:
             i = doc.metadata["chunk_index"]
+
+            # To speed up the section_summaries generating speed
             if i % 3 == 1:
                 chunk_summary = summarize_text(doc.page_content)
                 doc.metadata["chunk_summary"] = chunk_summary
@@ -286,9 +275,6 @@ def retrieve_process(retrieved_context, query):
     response = requests.post(API_URL, headers=headers, json=data)
 
     text = response.json()[0]["generated_text"]
-
-    print("---------------------------------The following section are the text being return by the hugging face model-------------------------")
-    print(text)
     return (text[text.index(prompt) + len(prompt) + 1:])
 
 
@@ -322,11 +308,13 @@ def update_section_summaries(llm_output, reranked_chunks, section_summaries):
     for key, value in new_summarisation.items():
         if key in section_summaries:
             section_summaries[key] += " " + value
+            if len(section_summaries[key]) >= 4000:
+                section_summaries[key] = summarize_text(section_summaries[key])
         else:
             section_summaries[key] = value
 
-    with open('section_summaries.json', 'w', encoding='utf-8') as f:
-        json.dump(section_summaries, f, ensure_ascii=False, indent=4)
+    # with open('section_summaries.json', 'w', encoding='utf-8') as f:
+    #     json.dump(section_summaries, f, ensure_ascii=False, indent=4)
 
     return section_summaries
 
@@ -341,14 +329,16 @@ def pipeline(query, company, year):
     all_relevant_chunks = retrieve_topk_chunks(top_matches, company, year)
     # print(all_relevant_chunks)
     if len(all_relevant_chunks) == 0:
-        return "No", top_matches
+        return "No", top_matches, 0
     flattened_chunks = flatten_chunks(all_relevant_chunks)
 
     reranked_chunks = rerank2(flattened_chunks)
     retrieved_context = generate_retrieve_context(reranked_chunks)
     # print(retrieved_context)
 
+    start = time.time()
     llm_output = retrieve_process(retrieved_context, query)
+    query_time = time.time() - start
     # print(llm_output)
 
     llm_output = llm_output.strip()
@@ -356,9 +346,7 @@ def pipeline(query, company, year):
     # Update the summaries everytime the retrieval process has been done.
 
     # update_section_summaries(llm_output, reranked_chunks, section_summaries)
-    print("****************************************************Output form one pipeline***********************************************")
-    print(llm_output)
-    return llm_output, top_matches
+    return llm_output, top_matches, query_time
 
     # if not llm_output.lower().startswith("Yes"):
     #     # no, then need to remove from the list, and scan through another 3 items
@@ -369,24 +357,55 @@ def pipeline(query, company, year):
 
 def exhaustive_query(query, company, year, section_summaries, removed):
     print(f"The length of the removed section is now: {len(removed)}")
+    # If search through the whole database but still don't have the answer
     if len(removed) >= len(section_summaries):
-        return "No context found from our Database"
+        return "No context found from our Database", 0
     else:
-        output, top_matches = pipeline(query, company, year)
+        output, top_matches, pipeline_query_time = pipeline(query, company, year)
+        print(output)
         if output.startswith("No"):
             removed.extend(top_matches)
-            return exhaustive_query(query, company, year, section_summaries, removed)
+            next_output, next_query_time =  exhaustive_query(query, company, year, section_summaries, removed)
+            return next_output, next_query_time + pipeline_query_time
         else:
-            return output
+            return output, pipeline_query_time
+
+
+def base_query(query):
+    top_k = vector_db.similarity_search(query, fetch_k=100, k=5)
+
+    reranked_chunks  = rerank2(top_k)
+    formatted_context = generate_retrieve_context(reranked_chunks)
+
+    start = time.time()
+    llm_output = retrieve_process(formatted_context, query)
+    query_time = time.time() - start
+
+    llm_output = llm_output.strip()
+
+    return llm_output, query_time
+
 
 
 if __name__ == "__main__":
     query = "Do you know who's Jiun Yih?"
-    print(query)
+    # query = "What's the apple's revenue on 2017?"
+    print(f"Query: {query}")
     company = "apple"
     year = "2017"
+    print(f"Searching criteria is as follows: {company} in Year {year}")
     removed = []
-    output = exhaustive_query(query, company, year, section_summaries, removed)
-
+    start = time.time()
+    output, query_time = exhaustive_query(query, company, year, section_summaries, removed)
+    print(f"----------The time taken to finish an exhaustive query is {time.time() - start}----------")
+    print(f"----------The time taken for just querying is {query_time}-------------------------------")
+    print(output)
     # exhaustive_query(query, company, year, section_summaries, removed)
+
+    base_start = time.time()
+    base_output, base_time = base_query(query)
+    print(f"----------The time taken to finish an base query is {time.time() - base_start}----------")
+    print(f"----------The time taken for just querying is {base_time}-------------------------------")
+    print(base_output)
+
 
