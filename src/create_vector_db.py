@@ -1,40 +1,34 @@
+# Standard Libraries
+import os
 import re
-from bs4 import BeautifulSoup
-import unicodedata
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.docstore.document import Document
-from transformers import pipeline
-import html 
-from bs4 import BeautifulSoup
 import json
-from langchain_community.vectorstores import FAISS
-from langchain_text_splitters import CharacterTextSplitter
-from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
-import numpy as np
-import os
-from langchain_community.vectorstores import FAISS
-from langchain_text_splitters import CharacterTextSplitter
-from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
-import numpy as np
-import textwrap
-from langchain_community.vectorstores import FAISS
-from langchain_text_splitters import CharacterTextSplitter
-from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
-import numpy as np
-import json
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.docstore.document import Document
-from transformers import pipeline
-from sec_edgar_downloader import Downloader
-import requests
-import os
 import time
+import html
+import textwrap
+import unicodedata
+
+# Web Requests and Parsing
+import requests
+from bs4 import BeautifulSoup
+
+# Numerical & Data Processing
+import numpy as np
+
+# Transformers & NLP
+from transformers import pipeline
+
+# Sentence Embeddings and Vector Search
 import faiss
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
 
+# Langchain Utilities
+from langchain.docstore.document import Document
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import CharacterTextSplitter
 
+# SEC EDGAR Downloader
+from sec_edgar_downloader import Downloader
 
 
 txt_folder = 'database/apple_10k_txts'
@@ -245,7 +239,7 @@ def add_10_K(file_path, vector_db, company, year, section_summaries):
         new_summaries = summarize_10k_chunks(summarise_this_chunks)
         section_summaries.update({k: v for k, v in new_summaries.items() if k not in section_summaries})
 
-        with open('section_summaries.json', 'w', encoding='utf-8') as f:
+        with open('src/section_summaries.json', 'w', encoding='utf-8') as f:
           json.dump(section_summaries, f, ensure_ascii=False, indent=4)
 
     # Add all chunks to the vector DB
@@ -255,8 +249,8 @@ def add_10_K(file_path, vector_db, company, year, section_summaries):
 
 #######################################################################################################################################
 
-# download_data()
-# convert_txt_file_to_html()
+download_data()
+convert_txt_file_to_html()
 
 for i, filename in enumerate(os.listdir(html_folder)):
     if filename == '.DS_Store':
@@ -288,7 +282,7 @@ for i, filename in enumerate(os.listdir(html_folder)):
             #     json.dump(section_summaries, f, ensure_ascii=False, indent=4)
 
             # no need to run the summarise_10k
-            with open('section_summaries.json', 'r', encoding='utf-8') as f:
+            with open('src/section_summaries.json', 'r', encoding='utf-8') as f:
                 section_summaries = json.load(f)
 
             embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")

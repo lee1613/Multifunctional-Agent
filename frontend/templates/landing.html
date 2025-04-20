@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Select Company and Year</title>
+  <style>
+    /* Global Styles */
+    body {
+        font-family: 'Arial', sans-serif;
+        background-color: #f1f5f9;
+        margin: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        padding: 20px;
+        background-image: url('/static/background3.jpg');
+        background-size: cover;
+        background-position: center;
+        background-attachment: fixed;
+    }
+
+    .form-container {
+      background: #ffffff;
+      padding: 40px;
+      border-radius: 16px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+      width: 100%;
+      max-width: 480px;
+      text-align: center;
+    }
+
+    h2 {
+      font-size: 28px;
+      margin-bottom: 30px;
+      color: #333;
+    }
+
+    label {
+      font-size: 18px;
+      color: #555;
+      margin-bottom: 10px;
+      display: block;
+      text-align: left;
+    }
+
+    select {
+      width: 100%;
+      padding: 14px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+      background-color: #fafafa;
+      color: #333;
+      cursor: pointer;
+      margin-bottom: 20px;
+      transition: all 0.3s ease;
+    }
+
+    select:focus {
+      border-color: #007bff;
+      background-color: #ffffff;
+      outline: none;
+    }
+
+    .button-container {
+      margin-top: 20px;
+    }
+
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      padding: 14px;
+      width: 100%;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 18px;
+      transition: background-color 0.3s ease;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    /* Flex Container for Selection */
+    .selection-container {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      margin-bottom: 30px;
+    }
+
+    .selection-container div {
+      flex: 1;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 600px) {
+      .selection-container {
+        flex-direction: column;
+      }
+
+      .selection-container div {
+        flex: unset;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="form-container">
+    <h2>Select a Company and Year</h2>
+    <form method="POST" action="{{ url_for('select_company') }}">
+      <div class="selection-container">
+        <!-- Company Selection -->
+        <div>
+          <label for="company">Choose Company:</label>
+          <select name="company" id="company" required>
+            <option value="Apple">Apple</option>
+            <option value="Microsoft">Microsoft</option>
+          </select>
+        </div>
+
+        <!-- Year Selection -->
+        <div>
+          <label for="year">Choose Year:</label>
+          <select name="year" id="year" required>
+            {% for y in range(2019, 2025) %}
+            <option value="{{ y }}">{{ y }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <!-- Submit Button -->
+      <div class="button-container">
+        <button type="submit">Submit</button>
+      </div>
+    </form>
+  </div>
+
+</body>
+</html>
