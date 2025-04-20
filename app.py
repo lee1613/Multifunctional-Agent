@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, jsonify
 import torch
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='frontend/templates', static_folder='frontend/static')
 
 # Load the GPT-2 model and tokenizer
 device = torch.device("cpu")  # You can change to "cuda" if you have a GPU
