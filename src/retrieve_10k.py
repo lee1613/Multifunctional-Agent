@@ -370,15 +370,35 @@ def exhaustive_query(query, company, year, section_summaries, removed):
         else:
             return output, pipeline_query_time
 
+def base_retrieve_process(retrieved_context, query):
+    prompt = f"""
+        You are given a user query and a set of retrieved documents. Answer the query based on the retrieved context.
+
+        Query: "{query}"
+        Retrieved Context:
+        {"\n".join(retrieved_context)}
+    """
+
+    model_id = "meta-llama/Llama-3.3-70B-Instruct"
+    API_URL = f"https://api-inference.huggingface.co/models/{model_id}"
+
+    # Remove the following line when push to github
+    api_key = os.environ["HUGGINGFACE_API_KEY"]
+    headers = {"Authorization": f"Bearer {api_key}"}
+
+    data = {"inputs": prompt}
+    response = requests.post(API_URL, headers=headers, json=data)
+
+    text = response.json()[0]["generated_text"]
+    return (text[text.index(prompt) + len(prompt) + 1:])
 
 def base_query(query):
     top_k = vector_db.similarity_search(query, fetch_k=100, k=5)
 
     reranked_chunks  = rerank2(top_k)
     formatted_context = generate_retrieve_context(reranked_chunks)
-
     start = time.time()
-    llm_output = retrieve_process(formatted_context, query)
+    llm_output = base_retrieve_process(formatted_context, query)
     query_time = time.time() - start
 
     llm_output = llm_output.strip()
@@ -388,11 +408,15 @@ def base_query(query):
 
 
 if __name__ == "__main__":
-    query = "Do you know who's Jiun Yih?"
+    # query = "Do you know who's Jiun Yih?"
     # query = "What's the apple's revenue on 2017?"
+    # query = "How much share of its own company has apple bought in 2023"
+    query = "Apple's RSU in 2022?"
+
+
     print(f"Query: {query}")
     company = "apple"
-    year = "2017"
+    year = "2022"
     print(f"Searching criteria is as follows: {company} in Year {year}")
     removed = []
     start = time.time()

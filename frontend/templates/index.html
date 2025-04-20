@@ -1,115 +1,102 @@
+<!-- templates/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simple Chatbot</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            background-image: url('/static/background3.jpg');
-            background-size: cover;
-            background-position: center;
-            background-attachment: fixed;
-        }
-        .chat-container {
-            width: 90%;
-            height:80%;
-            max-width: 800px;
-            margin: 50px auto;
-            padding: 20px;
-            border: 1px solid #ccc;
-            border-radius: 10px;
-            background-color: rgba(249, 249, 249, 0.9); /* Semi-transparent background */
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Optional: Adds shadow to make it stand out */
-        }
-        #output {
-            height: 85%;
-            width: 98%;
-            overflow-y: scroll;
-            border: 1px solid #ccc;
-            margin-bottom: 10px;
-            padding: 10px;
-            background-color: #fff;
-        }
-        input[type="text"] {
-            width: 98%;
-            height: 5%;
-            padding: 10px;
-            margin-top: 10px;
-            border-radius: 5px;
-            border: 1px solid #ccc;
-        }
-        /* Style for user messages */
-        .user-msg {
-            text-align: right;
-            background-color: #DCF8C6;
-            margin: 5px 0;
-            padding: 5px;
-            border-radius: 5px;
-        }
-        /* Style for bot messages */
-        .bot-msg {
-            text-align: left;
-            background-color: #E6E6E6;
-            margin: 5px 0;
-            padding: 5px;
-            border-radius: 5px;
-            display: flex;
-            align-items: center;
-        }
-        .bot-avatar {
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            margin-right: 10px;
-        }
-    </style>
+  <meta charset="UTF‑8" />
+  <meta name="viewport" content="width=device‑width, initial‑scale=1.0" />
+  <title>Stocks Chatbot</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
 </head>
 <body>
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="chat-sessions">
+      <button class="btn new-chat">+ New Chat</button>
+      <ul class="sessions-list">
+        <!-- loop your saved sessions here -->
+        <li>
+          <span>Apple Q3 2024 Revenue Analysis</span>
+          <button class="icon edit">✏️</button>
+          <button class="icon del">🗑️</button>
+        </li>
+      </ul>
+    </div>
+    <div class="settings">
+      <label for="stock-select">Select Stock Symbol:</label>
+      <select id="stock-select">
+        <option>AAPL</option>
+        <option>GOOG</option>
+      </select>
+      <div class="how-to">
+        <h4>How to Use:</h4>
+        <ol>
+          <li>Choose a stock from the dropdown.</li>
+          <li>Ask a question about its performance.</li>
+          <li>Press Enter to get insights.</li>
+        </ol>
+      </div>
+    </div>
+  </aside>
 
-<div class="chat-container">
-    <div id="output"></div>
-    <input type="text" id="user_input" placeholder="Type your message..." onkeydown="if(event.key === 'Enter') sendMessage()">
-</div>
+  <!-- Main chat area -->
+  <main class="chat-area">
+    <header class="chat-header">
+      <h1>Stocks Chatbot</h1>
+      <p class="note">Note: This app currently provides AAPL data exclusively for the year 2024.</p>
+    </header>
 
-<script>
+    <!-- Output & input from your original -->
+    <div class="chat-container">
+      <div id="output"></div>
+      <input
+        type="text"
+        id="user_input"
+        placeholder="Ask about the stock…"
+        onkeydown="if(event.key==='Enter') sendMessage()"
+      />
+    </div>
+  </main>
+
+  <!-- Floating company/year panel -->
+  <div class="info-panel">
+    <div><strong>Company:</strong> {{ company }}</div>
+    <div><strong>Year:</strong> {{ year }}</div>
+    <form method="get" action="{{ url_for('landing_page') }}">
+      <button type="submit">Change</button>
+    </form>
+  </div>
+
+  <script>
     function sendMessage() {
-        const user_input = document.getElementById('user_input').value;
-        if (user_input.trim() === "") return;
-        
-        // Display the user's input (align to right, no "User:" label)
-        const userMessage = `<div class="user-msg">${user_input}</div>`;
-        document.getElementById('output').innerHTML += userMessage;
-        document.getElementById('user_input').value = '';
+      const inp = document.getElementById('user_input');
+      const text = inp.value.trim();
+      if (!text) return;
 
-        // Send input to backend (Flask)
-        fetch('/get_response', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ user_input: user_input })
-        })
-        .then(response => response.json())
-        .then(data => {
-            const bot_response = data.response;
-            // Display bot's response with avatar beside it (align to left, no "Bot:" label)
-            const botMessage = `<div class="bot-msg">
-                                    <img src="/static/bot-avatar.png" class="bot-avatar" alt="Bot Avatar">
-                                    ${bot_response}
-                                </div>`;
-            document.getElementById('output').innerHTML += botMessage;
-            document.getElementById('output').scrollTop = document.getElementById('output').scrollHeight;
-        });
+      // user bubble
+      const u = document.createElement('div');
+      u.className = 'user-msg fade-in';
+      u.textContent = text;
+      document.getElementById('output').appendChild(u);
+      inp.value = '';
+
+      fetch('/get_response', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({user_input: text})
+      })
+      .then(r => r.json())
+      .then(data => {
+        const b = document.createElement('div');
+        b.className = 'bot-msg fade-in';
+        const img = document.createElement('img');
+        img.src = '/static/bot-avatar.png';
+        img.className = 'bot-avatar';
+        b.appendChild(img);
+        b.innerHTML += data.response.replace(/\n/g,'<br>');
+        document.getElementById('output').appendChild(b);
+        document.getElementById('output').scrollTop = document.getElementById('output').scrollHeight;
+      });
     }
-</script>
-
+  </script>
 </body>
 </html>
