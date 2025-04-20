@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 import torch
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
-from src.retrieve_10k import pipeline
+# from src.retrieve_10k import pipeline
 from src.cross_checker import multimodal_agent
 
 app = Flask(__name__, template_folder='frontend/templates', static_folder='frontend/static')

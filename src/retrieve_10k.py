@@ -322,7 +322,7 @@ def update_section_summaries(llm_output, reranked_chunks, section_summaries):
 # updated_section_summaries = update_section_summaries(llm_output, reranked_chunks, section_summaries)
 
 
-def pipeline(query, company, year):
+def pipeline(query, company, year, removed):
     top_matches = find_items(query, section_summaries, removed)
     # print(top_matches)
 
@@ -361,7 +361,7 @@ def exhaustive_query(query, company, year, section_summaries, removed):
     if len(removed) >= len(section_summaries):
         return "No context found from our Database", 0
     else:
-        output, top_matches, pipeline_query_time = pipeline(query, company, year)
+        output, top_matches, pipeline_query_time = pipeline(query, company, year, removed)
         print(output)
         if output.startswith("No"):
             removed.extend(top_matches)
@@ -411,12 +411,11 @@ if __name__ == "__main__":
     # query = "Do you know who's Jiun Yih?"
     # query = "What's the apple's revenue on 2017?"
     # query = "How much share of its own company has apple bought in 2023"
-    query = "Apple's RSU in 2022?"
-
+    query = "How is the revenue like for emerging markets in China in 2024?"
 
     print(f"Query: {query}")
     company = "apple"
-    year = "2022"
+    year = "2024"
     print(f"Searching criteria is as follows: {company} in Year {year}")
     removed = []
     start = time.time()
