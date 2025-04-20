@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 import torch
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
-from src.retrieve_10k import pipeline
+# from src.retrieve_10k import pipeline
 from src.cross_checker import multimodal_agent
 
 app = Flask(__name__, template_folder='frontend/templates', static_folder='frontend/static')
@@ -22,10 +22,10 @@ def landing_page():
 def select_company():
     company = request.form.get('company')
     year = request.form.get('year')
-    
+
     # Debugging output
     print(f"Selected Company: {company}, Selected Year: {year}")
-    
+
     session['company'] = company
     session['year'] = year
     return redirect(url_for('chat'))
@@ -34,13 +34,13 @@ def select_company():
 def chat():
     if 'company' not in session or 'year' not in session:
         return redirect(url_for('landing_page'))
-    
+
     company = session.get('company', '')
     year = session.get('year', '')
-    
+
     # Debugging output
     print(f"Company: {company}, Year: {year}")
-    
+
     return render_template('index.html', company=company, year=year)
 
 # @app.route('/get_response', methods=['POST'])

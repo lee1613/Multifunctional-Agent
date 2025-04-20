@@ -5,6 +5,12 @@ import os
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
+import librosa
+import numpy as np
+import os
+from pydub import AudioSegment
+import nltk
+from nltk.tokenize import word_tokenize
 
 # from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.embeddings import OpenAIEmbeddings
@@ -16,6 +22,8 @@ import pandas as pd
 from bs4 import BeautifulSoup
 import os
 from sentence_transformers import CrossEncoder
+import json
+
 
 # Load the cross-encoder model
 cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
@@ -28,8 +36,10 @@ os.environ["OPENAI_API_KEY"] = ""
 
 # Initialize embedding model
 embedding_model = OpenAIEmbeddings(model="text-embedding-ada-002")
+json_path = "audio_chunks/apple_q4_2024_AUDIO_chunks.json"
 
 
+# scraping the motley fool earnings call transcript 
 def fetch_and_save_transcript(url):
     # Send a GET request to the URL
     response = requests.get(url)
@@ -53,10 +63,72 @@ def fetch_and_save_transcript(url):
 
     return transcript
 
-def chunk_transcript(text):
 
+# Function to extract the relevant audio features from the audio file
+def extract_audio_features(audio_path, sr=16000):
+
+    # Load the audio segment using librosa.
+    y, sr = librosa.load(audio_path, sr=sr)
+
+    # Compute 13 MFCCs and take the mean across time for each coefficient.
+    mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+    mfccs_avg = np.mean(mfccs, axis=1).tolist()
+
+    # Use librosa.pyin to estimate pitch (f0). fmin and fmax defined for typical speech range.
+    f0, voiced_flag, voiced_prob = librosa.pyin(
+        y,
+        fmin=librosa.note_to_hz('C2'),
+        fmax=librosa.note_to_hz('C7')
+    )
+    # Compute mean pitch over voiced regions (ignore unvoiced).
+    if f0 is not None and np.any(voiced_flag):
+        pitch_mean = float(np.mean(f0[voiced_flag]))
+    else:
+        pitch_mean = None
+
+    # Calculate Root Mean Square (RMS) energy and compute the mean value.
+    rms = librosa.feature.rms(y=y)
+    rms_mean = float(np.mean(rms))
+
+    return {
+        'mfccs_avg': mfccs_avg,
+        'pitch_mean': pitch_mean,
+        'rms_mean': rms_mean
+    }
+
+# Splitting audio features into chunks
+def split_audio_by_chunks(audio_file_path, chunks, output_dir="audio_chunks"):
+
+    # Load audio
+    full_audio = AudioSegment.from_file(audio_file_path, format="mp3")
+    total_audio_ms = len(full_audio)
+
+    # Total word count across all chunks
+    def count_words(text):
+        return len(word_tokenize(text))
     
+    total_words = sum(count_words(chunk['text']) for chunk in chunks)
+    
+    current_start_ms = 0
+    os.makedirs(output_dir, exist_ok=True)
 
+    for chunk in chunks:
+        wc = count_words(chunk['text'])
+        chunk_duration_ms = int((wc / total_words) * total_audio_ms)
+        chunk['start_time'] = current_start_ms
+        chunk['end_time'] = current_start_ms + chunk_duration_ms
+
+        audio_segment = full_audio[chunk['start_time']:chunk['end_time']]
+        out_filename = f"{chunk['chunk_id']}.mp3"
+        out_path = os.path.join(output_dir, out_filename)
+        audio_segment.export(out_path, format="mp3")
+        chunk['audio_file'] = out_path
+
+        current_start_ms += chunk_duration_ms
+
+    return chunks
+
+def chunk_transcript(text):
     # Pattern to detect speakers including Operator
     speaker_pattern = re.compile(r'^(?:[A-Z][a-z]+(?: [A-Z][a-z]+)* -- .+|Operator)$', re.MULTILINE)
     chunks = []
@@ -97,26 +169,48 @@ def chunk_transcript(text):
         chunks.append(chunk)
         chunk_id += 1
         pending_question = None  # Clear after attaching to next answer
+
+    return chunks
+
+
+def process_audio_features(chunks):
     
-    # convert documents
-    documents = [
-        Document(
-            page_content=entry["text"],
-            metadata={
-                "chunk_id": entry["chunk_id"],
-                "speaker": entry["speaker"]
-            }
-        )
-        for entry in chunks if entry["text"].strip()  
-    ]
+    pitch_list = [chunk['audio_features']['pitch_mean'] for chunk in chunks if 'audio_features' in chunk]
+    rms_list   = [chunk['audio_features']['rms_mean'] for chunk in chunks if 'audio_features' in chunk]
 
-    # Initialize embedding model
-    embedding_model = OpenAIEmbeddings(model="text-embedding-ada-002")
+    pitch_global_mean = np.mean(pitch_list)
+    pitch_global_std  = np.std(pitch_list)
+    rms_global_mean   = np.mean(rms_list)
+    rms_global_std    = np.std(rms_list)
 
-    # Build FAISS index
-    faiss_index = FAISS.from_documents(documents, embedding_model)
+    
+    for chunk in chunks:
+        if 'audio_features' in chunk:
+            features = chunk['audio_features']
 
-    return faiss_index
+            # Standardize pitch and RMS (z-score)
+            pitch = features.get('pitch_mean', 0)
+            rms   = features.get('rms_mean', 0)
+
+            pitch_z = (pitch - pitch_global_mean) / (pitch_global_std + 1e-8)
+            rms_z   = (rms - rms_global_mean) / (rms_global_std + 1e-8)
+
+            features['pitch_z'] = pitch_z
+            features['rms_z'] = rms_z
+
+            # Composite intensity score
+            features['composite_intensity'] = abs(pitch_z) + abs(rms_z)
+
+            # MFCCs analysis
+            mfccs = np.array(features.get('mfccs_avg', []))
+            if mfccs.size > 0:
+                features['mfccs_mean_abs'] = float(np.mean(np.abs(mfccs)))
+                features['mfccs_variance'] = float(np.var(mfccs))
+            else:
+                features['mfccs_mean_abs'] = None
+                features['mfccs_variance'] = None
+
+    return chunks
 
 def retrieve_relevant_docs(query, vector_store, k=5):
     # Retrieve top-k similar document chunks for the query
@@ -155,6 +249,17 @@ def rerank_documents(query, retrieved_docs, cross_encoder):
 
     return reranked_docs
 
+def create_audio_summary(audio_features):
+
+    pitch_z = audio_features.get('pitch_z', 'N/A')
+    rms_z = audio_features.get('rms_z', 'N/A')
+    composite_intensity = audio_features.get('composite_intensity', 'N/A')
+
+    summary = (f"\nAudio Analysis Summary: The normalized pitch is {pitch_z:.4f} and "
+               f"the normalized RMS energy is {rms_z:.4f}, leading to a composite intensity of "
+               f"{composite_intensity:.4f}.")
+    return summary
+
 def build_prompt(retrieved_docs, query, prompt_engineering):
     context_chunks = []
 
@@ -163,40 +268,55 @@ def build_prompt(retrieved_docs, query, prompt_engineering):
         speaker = doc.metadata.get('speaker', 'Unknown')
         source_info = f"\n[Source: {speaker}]"
 
-        # Add question if it exists
+        # Use question if it exists
         question = doc.metadata.get("question", "")
         if question:
             chunk_text = f"Q: {question}\nA: {doc.page_content}"
         else:
             chunk_text = doc.page_content
 
+        # Incorporate audio features (if available) from metadata
+        audio_feat = doc.metadata.get("audio_features", None)
+        if audio_feat:
+            audio_summary = create_audio_summary(audio_feat)
+        else:
+            audio_summary = ""
+
+
         chunk_text = chunk_text.replace("\n", " ")
-        context_chunks.append(f"{i}. {chunk_text}{source_info}")
+
+
+        context_chunks.append(f"{i}. {chunk_text}{source_info}{audio_summary}")
 
     # Join all context chunks
     context = "\n\n".join(context_chunks)
 
-    # Prompt template
+    # Build the final multimodal prompt (including instructions and query)
     prompt = (
-        "You are a financial analyst reviewing an earnings call transcript. Your task is to extract and summarize key factual claims and sentiment-related insights expressed by management that can later be verified against the company's 10-K filing."
-        " The 10-K contains detailed data in sections such as the Management Discussion and Analysis (MD&A), Financial Statements, Business Overview, and Risk Factors.\n\n"
+        "You are a financial analyst reviewing an earnings call transcript and its associated audio features. "
+        "Your task is to extract and summarize key factual claims and sentiment-related insights expressed by management "
+        "that can later be verified against the company's 10-K filing. The 10-K contains detailed data in sections such as "
+        "the Management Discussion and Analysis (MD&A), Financial Statements, Business Overview, and Risk Factors.\n\n"
+        "Take into account the question, speaker, earnings call transcript text and audio features (like pitch, RMS energy, "
+        "and composite intensity) in your elaboration to provide a comprehensive analysis.\n\n"
 
         "Instructions:\n\n"
-        "Based on the retrieved context from earnings call transcripts below:\n\n"
+        "Based on the retrieved context from earnings call transcripts (with their corresponding audio features) below:\n\n"
         "#### Context/Retrieved Statements:\n{context}\n\n"
-        "Identify and extract factual claims regarding the company’s performance, outlook, and any sentiment indications (for example, optimism about growth, caution regarding risks, or confidence in future performance).\n\n"
+        "Identify and extract factual claims regarding the company’s performance, outlook, and any sentiment indications "
+        "(for example, optimism about growth, caution regarding risks, or confidence in future performance).\n\n"
         "For each claim, provide the following details in a structured format:\n\n"
         "Claim Text: A concise statement of the fact or sentiment.\n\n"
         "[Source: speaker]\n\n"
-        "Metric/Detail (if applicable): Any quantifiable data (e.g., “revenue growth of 15%”, “EBITDA margin improvement”).\n\n"
-        "Relevant Reporting Period: Indicate the fiscal year or quarter mentioned (e.g., “FY2023”).\n\n"
-        "Target 10-K Section: Suggest which section of the 10-K is most appropriate to verify this claim (for example, “MD&A”, “Financial Statements”, “Risk Factors”, “Business Overview”).\n\n"
+        "Metric/Detail (if applicable): Any quantifiable data (e.g., 'revenue growth of 15%', 'EBITDA margin improvement').\n\n"
+        "Relevant Reporting Period: Indicate the fiscal year or quarter mentioned (e.g., 'FY2023').\n\n"
+        "Target 10-K Section: Suggest which section of the 10-K is most appropriate to verify this claim (for example, 'MD&A', 'Financial Statements', 'Risk Factors', 'Business Overview').\n\n"
         "#### Query: {query}\n\n"
     ).format(context=context, query=query, prompt_engineering=prompt_engineering)
 
     return prompt
 
-def generate_insight(prompt, model="gpt-4-turbo", temperature=0.1, max_tokens=512):
+def generate_insight(prompt, model="gpt-4-turbo", temperature=0.1, max_tokens=1080):
     """
     Generate analysis using the given prompt via the OpenAI ChatCompletion API.
     """
@@ -214,8 +334,27 @@ def generate_insight(prompt, model="gpt-4-turbo", temperature=0.1, max_tokens=51
 
 def pipeline(query):
     prompt_engineering = ""
-    transcript = fetch_and_save_transcript(url)
-    faiss_index = chunk_transcript(transcript)
+    with open(json_path, "r", encoding="utf-8") as f:
+        chunks = json.load(f)
+    chunks = process_audio_features(chunks)
+
+    documents = [
+        Document(
+            page_content=entry["text"],
+            metadata={
+                "chunk_id": entry["chunk_id"],
+                "speaker": entry["speaker"],
+                "question": entry["question"],
+                "audio_features": entry["audio_features"]
+            }
+        )
+        for entry in chunks if entry["text"].strip()
+    ]
+
+    embedding_model = OpenAIEmbeddings(model="text-embedding-ada-002")
+    faiss_index = FAISS.from_documents(documents, embedding_model)
+
+    
     retrieved_docs = retrieve_and_rerank(query, faiss_index, cross_encoder, initial_k=10, final_k=5)
     prompt = build_prompt(retrieved_docs, query, prompt_engineering)
     insight = generate_insight(prompt)
@@ -224,3 +363,9 @@ def pipeline(query):
     print(insight)
     return insight
 
+
+if __name__ == "__main__":
+    query = "Analyze Apples's sentiment level."
+    company = 'Apple' 
+    year = '2024'
+    pipeline(query)
